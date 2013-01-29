@@ -90,6 +90,38 @@ class SQLAlchemyDebugPanel(DebugPanel):
             })
         return self.render('panels/sqlalchemy.html', { 'queries': data})
 
+    @property
+    def debug_info(self):
+        if not json_available or not sqlalchemy_available:
+            return {}
+
+        queries = get_debug_queries()
+        data = []
+        for query in queries:
+            is_select = query.statement.strip().lower().startswith('select')
+            _params = ''
+            try:
+                _params = json.dumps(query.parameters)
+            except TypeError:
+                pass # object not JSON serializable
+
+            hash = hashlib.sha1(
+                current_app.config['SECRET_KEY'] +
+                query.statement + _params).hexdigest()
+
+            data.append({
+                'duration': query.duration,
+                'sql': format_sql(query.statement, query.parameters),
+                'raw_sql': query.statement,
+                'hash': hash,
+                'params': _params,
+                'is_select': is_select,
+                'context_long': query.context,
+                'context': format_fname(query.context)
+            })
+
+        return data
+
 # Panel views
 
 @module.route('/sqlalchemy/sql_select', methods=['GET', 'POST'])

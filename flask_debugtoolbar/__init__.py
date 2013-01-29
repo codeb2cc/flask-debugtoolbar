@@ -1,4 +1,5 @@
 import os
+import json
 
 from flask import current_app, request, g
 from flask.globals import _request_ctx_stack
@@ -161,17 +162,27 @@ class DebugToolbarExtension(object):
 
         # If the http response code is 200 then we process to add the
         # toolbar to the returned html response.
-        if (response.status_code == 200
-            and response.headers['content-type'].startswith('text/html')):
-            for panel in self.debug_toolbars[real_request].panels:
-                panel.process_response(real_request, response)
+        if response.status_code == 200:
+            if response.headers['content-type'].startswith('text/html'):
+                for panel in self.debug_toolbars[real_request].panels:
+                    panel.process_response(real_request, response)
 
-            if response.is_sequence:
-                response_html = response.data.decode(response.charset)
-                toolbar_html = self.debug_toolbars[real_request].render_toolbar()
+                if response.is_sequence:
+                    response_html = response.data.decode(response.charset)
+                    toolbar_html = self.debug_toolbars[real_request].render_toolbar()
 
-                content = replace_insensitive(
-                    response_html, '</body>', toolbar_html + '</body>')
+                    content = replace_insensitive(
+                        response_html, '</body>', toolbar_html + '</body>')
+                    content = content.encode(response.charset)
+                    response.response = [content]
+                    response.content_length = len(content)
+            elif response.headers['content-type'].startswith('application/json'):
+                res_json = json.loads(response.data.decode(response.charset))
+                res_json['_debug_toolbar'] = {}
+                for panel in self.debug_toolbars[real_request].panels:
+                    res_json['_debug_toolbar'][panel.name] = getattr(panel, 'debug_info', None)
+
+                content = json.dumps(res_json)
                 content = content.encode(response.charset)
                 response.response = [content]
                 response.content_length = len(content)
